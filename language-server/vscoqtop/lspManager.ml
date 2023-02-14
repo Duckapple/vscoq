@@ -127,6 +127,18 @@ let parse_loc json =
   let char = json |> member "character" |> to_int in
   Position.{ line ; char }
 
+let make_loc Position.{ line; char }  = 
+  `Assoc [
+    "line", `Int line;
+    "character", `Int char;
+  ]
+
+let make_range Range.{ start; stop } =
+  `Assoc [
+    "start", make_loc start;
+    "end", make_loc stop;
+  ]
+
 let publish_diagnostics uri doc =
   output_json @@ mk_diagnostics uri @@ Dm.DocumentManager.diagnostics doc
 
@@ -286,9 +298,15 @@ let coqtopGetDeclarationLocation ~id params =
   let st = Hashtbl.find states uri in
   match Dm.DocumentManager.get_location st loc requestedDeclaration with
   | None -> ()
-  | Some (path, range) ->
+  | Some (path, None) ->
     let result = `Assoc [
       "path", `String path;
+    ] in
+    output_json @@ mk_response ~id ~result
+  | Some (path, Some range) ->
+    let result = `Assoc [
+      "path", `String path;
+      "range", make_range range;
     ] in
     output_json @@ mk_response ~id ~result
 
