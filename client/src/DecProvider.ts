@@ -7,17 +7,12 @@ import * as fs from 'fs';
 
 export default class DecProvider implements DeclarationProvider {
     client: Client;
-    coqlibPath: URL | undefined;
     
-    constructor(client: Client, coqlibPath : string) {
+    constructor(client: Client) {
         this.client = client;
-        this.coqlibPath = coqlibPath ? pathToFileURL(coqlibPath) : undefined; 
     }
 
     async provideDeclaration(document: TextDocument, position: Position, token: CancellationToken): Promise<Declaration> {
-        if (!this.coqlibPath) {
-            throw new Error("No path set to CoqLib");
-        }
         let coqIdentRegex = /(\.?(\w|\_)(\w|\d|\_|\')*)+/;
         let wordRange = document.getWordRangeAtPosition(position, coqIdentRegex);
         let requestedDeclaration = document.getText(wordRange);
