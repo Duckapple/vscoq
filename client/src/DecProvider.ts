@@ -3,6 +3,7 @@ import { CancellationToken, Declaration, DeclarationProvider, Location, Position
 import { RequestType, VersionedTextDocumentIdentifier } from "vscode-languageclient";
 import Client from "./client";
 import { CompletionItemCoq, CompletionItemCoqRequest, CompletionItemCoqResponse } from "./protocol/types";
+import * as fs from 'fs';
 
 export default class DecProvider implements DeclarationProvider {
     client: Client;
@@ -22,10 +23,11 @@ export default class DecProvider implements DeclarationProvider {
         let word = document.getText(wordRange);
         let items = await this.sendCompletionItemsRequest(document.uri, document.version, position);
         let item = items.find((i) => i.label === word);
-        let pathItems = item?.path?.split('.');
-        let filename = item?.path?.split('.').at(-1) + ".v";
-        let path = this.coqlibPath + `/theories/` + pathItems?.slice(1, -1).concat([filename]).join("/");
-        return new Location(Uri.parse(path), new Position(0, 0));
+        let path = item?.path?.replace(/\.vo$/, ".v");
+        if (path && fs.existsSync(path)) {
+            return new Location(Uri.parse(path), new Position(0, 0));
+        }
+        throw new Error(`Could not find path to ${word}`);
     }
 
     private sendCompletionItemsRequest(uri: Uri, version: number, position: Position): Promise<CompletionItemCoq[]> {
