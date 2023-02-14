@@ -2,7 +2,7 @@ import { pathToFileURL } from "url";
 import { CancellationToken, Declaration, DeclarationProvider, Location, Position, ProviderResult, TextDocument, Uri } from "vscode";
 import { RequestType, VersionedTextDocumentIdentifier } from "vscode-languageclient";
 import Client from "./client";
-import { CompletionItemCoq, CompletionItemCoqRequest, CompletionItemCoqResponse } from "./protocol/types";
+import { CompletionItemCoq, CompletionItemCoqRequest, CompletionItemCoqResponse, DeclarationLocationCoqRequest, DeclarationLocationCoqResponse } from "./protocol/types";
 import * as fs from 'fs';
 
 export default class DecProvider implements DeclarationProvider {
@@ -20,26 +20,25 @@ export default class DecProvider implements DeclarationProvider {
         }
         let coqIdentRegex = /(\.?(\w|\_)(\w|\d|\_|\')*)+/;
         let wordRange = document.getWordRangeAtPosition(position, coqIdentRegex);
-        let word = document.getText(wordRange);
-        let items = await this.sendCompletionItemsRequest(document.uri, document.version, position);
-        let item = items.find((i) => i.label === word);
-        let path = item?.path?.replace(/\.vo$/, ".v");
+        let requestedDeclaration = document.getText(wordRange);
+        let response = await this.sendDeclarationLocationRequest(document.uri, document.version, position, requestedDeclaration);
+        let path = response.path.replace(/\.vo$/, ".v");
         if (path && fs.existsSync(path)) {
             return new Location(Uri.parse(path), new Position(0, 0));
         }
-        throw new Error(`Could not find path to ${word}`);
+        throw new Error(`Could not find path to ${requestedDeclaration}`);
     }
 
-    private sendCompletionItemsRequest(uri: Uri, version: number, position: Position): Promise<CompletionItemCoq[]> {
-        const req = new RequestType<CompletionItemCoqRequest, CompletionItemCoqResponse, void>("vscoq/getCompletionItems");
+    private sendDeclarationLocationRequest(uri: Uri, version: number, position: Position, requestedDeclaration: string): Promise<DeclarationLocationCoqResponse> {
+        const req = new RequestType<DeclarationLocationCoqRequest, DeclarationLocationCoqResponse, void>("vscoq/declarationLocation");
         let textDocument = VersionedTextDocumentIdentifier.create(
             uri.toString(),
             version
         );
-        const params: CompletionItemCoqRequest = { textDocument, position };
+        const params: DeclarationLocationCoqRequest = { textDocument, position, requestedDeclaration };
         return this.client.sendRequest(req, params).then(
-            (completionItemCoqResponse: CompletionItemCoqResponse) => {
-                return completionItemCoqResponse.completionItems;
+            (response: DeclarationLocationCoqResponse) => {
+                return response;
             }
         );
     }
