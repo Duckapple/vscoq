@@ -13,8 +13,6 @@ let mk_hyp sigma d (env,l) =
   let hyps = ids' |> List.map (fun id -> (id, Pp.string_of_ppcmds typ', "")) in
   (env', hyps @ l)
 
-
-
 let get_hyps st loc =
   let mk_hyps sigma goal =
     let evi = Evd.find sigma goal in

@@ -245,8 +245,8 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
   let make_label (label, typ, path) = 
     `Assoc [
       "label", `String label;
-      "typeString", `String typ;
-      "path", `String path;
+      "detail", `String typ;
+      "documentation", `String ("Path: " ^ path)
     ]
 
   let textDocumentCompletion ~id params =
