@@ -13,21 +13,25 @@ let mk_hyp sigma d (env,l) =
   let hyps = ids' |> List.map (fun id -> (id, Pp.string_of_ppcmds typ', "")) in
   (env', hyps @ l)
 
-let mk_hyps sigma goal =
-  let evi = Evd.find sigma goal in
-  let env = Evd.evar_filtered_env (Global.env ()) evi in
-  let min_env = Environ.reset_context env in
-  let (_env, hyps) =
-    Context.Compacted.fold (mk_hyp sigma)
-      (Termops.compact_named_context (Environ.named_context env)) ~init:(min_env,[]) in
-  hyps
+
+
+let get_hyps st loc =
+  let mk_hyps sigma goal =
+    let evi = Evd.find sigma goal in
+    let env = Evd.evar_filtered_env (Global.env ()) evi in
+    let min_env = Environ.reset_context env in
+    let (_env, hyps) =
+      Context.Compacted.fold (mk_hyp sigma)
+        (Termops.compact_named_context (Environ.named_context env)) ~init:(min_env,[]) in
+    hyps in
+
+  DocumentManager.get_proof st loc
+    |> Option.map (fun Proof.{ goals; sigma; _ } -> Option.cata (mk_hyps sigma) [] (List.nth_opt goals 0)) 
  
-let getCompletionItems ~id params st loc =
+let get_completion_items ~id params st loc =
   let open Yojson.Basic.Util in
-  let hypotheses =
-    DocumentManager.get_proof st loc
-    |> Option.map (fun Proof.{ goals; sigma; _ } -> Option.cata (mk_hyps sigma) [] (List.nth_opt goals 0)) in
-  let lemmasOption : CompletionItem.completion_item list option = DocumentManager.get_lemmas st loc in
+  let hypotheses = get_hyps st loc in
+  let lemmasOption = DocumentManager.get_lemmas st loc in
   let lemmas = lemmasOption |> Option.map (List.map CompletionItem.pp_completion_item) in
   [hypotheses; lemmas] 
   |> List.map (Option.default [])

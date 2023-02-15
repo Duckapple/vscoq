@@ -255,7 +255,7 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
     let uri = textDocument |> member "uri" |> to_string in
     let loc = params |> member "position" |> parse_loc in
     let st = Hashtbl.find states uri in
-    let completionItems = Dm.CompletionSuggester.getCompletionItems ~id params st loc in
+    let completionItems = Dm.CompletionSuggester.get_completion_items ~id params st loc in
     let result = `List (completionItems |> List.map make_label) in
     output_json @@ mk_response ~id ~result
 
@@ -347,28 +347,28 @@ let coqtopCheck ~id params =
     let result = mk_proofview proofview in
     output_json @@ mk_response ~id ~result 
 
-let coqtopSearch ~id params =
-  let open Yojson.Basic.Util in
-  let textDocument = params |> member "textDocument" in
-  let uri = textDocument |> member "uri" |> to_string in
-  let loc = params |> member "position" |> parse_loc in
-  let pattern = params |> member "pattern" |> to_string in
-  let search_id = params |> member "id" |> to_string in
-  let st = Hashtbl.find states uri in
-  try
-    let notifications = Dm.DocumentManager.search st ~id:search_id loc pattern in
-    let result = `Null in
-    output_json @@ mk_response ~id ~result; notifications
-  with e ->
-    let e, info = Exninfo.capture e in
-    let code = Lsp.LspData.Error.requestFailed in
-    let message = Pp.string_of_ppcmds @@ CErrors.iprint (e, info) in
-    output_json @@ mk_error_response ~id ~code ~message; []
+  let coqtopSearch ~id params =
+    let open Yojson.Basic.Util in
+    let textDocument = params |> member "textDocument" in
+    let uri = textDocument |> member "uri" |> to_string in
+    let loc = params |> member "position" |> parse_loc in
+    let pattern = params |> member "pattern" |> to_string in
+    let search_id = params |> member "id" |> to_string in
+    let st = Hashtbl.find states uri in
+    try
+      let notifications = Dm.DocumentManager.search st ~id:search_id loc pattern in
+      let result = `Null in
+      output_json @@ mk_response ~id ~result; notifications
+    with e ->
+      let e, info = Exninfo.capture e in
+      let code = Lsp.LspData.Error.requestFailed in
+      let message = Pp.string_of_ppcmds @@ CErrors.iprint (e, info) in
+      output_json @@ mk_error_response ~id ~code ~message; []
 
-let coqtopSearchResult ~id name statement =
-  let event = "vscoq/searchResult" in
-  let params = `Assoc [ "id", `String id; "name", `String name; "statement", `String statement ] in
-  output_json @@ mk_notification ~event ~params
+  let coqtopSearchResult ~id name statement =
+    let event = "vscoq/searchResult" in
+    let params = `Assoc [ "id", `String id; "name", `String name; "statement", `String statement ] in
+    output_json @@ mk_notification ~event ~params
 
 let dispatch_method ~id method_name params : events =
   match method_name with
