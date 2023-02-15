@@ -127,7 +127,7 @@ let parse_loc json =
   let char = json |> member "character" |> to_int in
   Position.{ line ; char }
 
-let make_loc Position.{ line; char }  = 
+  let make_loc Position.{ line; char }  = 
   `Assoc [
     "line", `Int line;
     "character", `Int char;
@@ -245,34 +245,18 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
       "path", `String path;
     ]
   
+  let make_label_from_tuple (label, typ, path) = 
+    `Assoc [
+      "label", `String label;
+      "typeString", `String typ;
+      "path", `String path;
+    ]
+
   let completionDebugInfo labels = 
     `Assoc [
         "completionItems", `List (List.map make_label labels)
       ]
   
-  let mk_hyp sigma d (env,l) =
-    let d' = CompactedDecl.to_named_context d in
-    let env' = List.fold_right Environ.push_named d' env in
-    let ids, typ = match d with
-    | CompactedDecl.LocalAssum (ids, typ) -> ids, typ
-    | CompactedDecl.LocalDef (ids,c,typ) -> ids, typ
-    in
-    let ids' = List.map (fun id -> `String (Names.Id.to_string id.Context.binder_name)) ids in
-    let typ' = pr_ltype_env env sigma typ in
-      let hyps = ids' |> List.map (fun id -> `Assoc [
-        "label", id;
-        "typeString", `String (Pp.string_of_ppcmds typ')
-      ]) in
-      (env', hyps @ l)
-
-  let mk_hyps sigma goal =
-    let evi = Evd.find sigma goal in
-    let env = Evd.evar_filtered_env (Global.env ()) evi in
-    let min_env = Environ.reset_context env in
-    let (_env, hyps) =
-      Context.Compacted.fold (mk_hyp sigma)
-        (Termops.compact_named_context (Environ.named_context env)) ~init:(min_env,[]) in
-    hyps
 
   let coqtopGetCompletionItems ~id params =
     let open Yojson.Basic.Util in
@@ -280,15 +264,8 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
     let uri = textDocument |> member "uri" |> to_string in
     let loc = params |> member "position" |> parse_loc in
     let st = Hashtbl.find states uri in
-    let hypotheses =
-      Dm.DocumentManager.get_proof st loc
-      |> Option.map (fun Proof.{ goals; sigma; _ } -> Option.cata (mk_hyps sigma) [] (List.nth_opt goals 0)) in
-    let lemmas = Dm.DocumentManager.get_lemmas st loc |> Option.map (List.map make_label) in
-    let result = `Assoc ["completionItems", `List ([hypotheses; lemmas]
-      |> List.map (Option.default [])
-      |> List.flatten)] in
-      output_json @@ mk_response ~id ~result
-
+    let completionItems = Dm.CompletionSuggester.getCompletionItems ~id params st loc in
+    let result = `Assoc ["completionItems", `List (completionItems |> List.map make_label_from_tuple)] in
 let coqtopGetDeclarationLocation ~id params =
   let open Yojson.Basic.Util in
   let textDocument = params |> member "textDocument" in
@@ -377,28 +354,28 @@ let coqtopCheck ~id params =
     let result = mk_proofview proofview in
     output_json @@ mk_response ~id ~result 
 
-  let coqtopSearch ~id params =
-    let open Yojson.Basic.Util in
-    let textDocument = params |> member "textDocument" in
-    let uri = textDocument |> member "uri" |> to_string in
-    let loc = params |> member "position" |> parse_loc in
-    let pattern = params |> member "pattern" |> to_string in
-    let search_id = params |> member "id" |> to_string in
-    let st = Hashtbl.find states uri in
-    try
-      let notifications = Dm.DocumentManager.search st ~id:search_id loc pattern in
-      let result = `Null in
-      output_json @@ mk_response ~id ~result; notifications
-    with e ->
-      let e, info = Exninfo.capture e in
-      let code = Lsp.LspData.Error.requestFailed in
-      let message = Pp.string_of_ppcmds @@ CErrors.iprint (e, info) in
-      output_json @@ mk_error_response ~id ~code ~message; []
+let coqtopSearch ~id params =
+  let open Yojson.Basic.Util in
+  let textDocument = params |> member "textDocument" in
+  let uri = textDocument |> member "uri" |> to_string in
+  let loc = params |> member "position" |> parse_loc in
+  let pattern = params |> member "pattern" |> to_string in
+  let search_id = params |> member "id" |> to_string in
+  let st = Hashtbl.find states uri in
+  try
+    let notifications = Dm.DocumentManager.search st ~id:search_id loc pattern in
+    let result = `Null in
+    output_json @@ mk_response ~id ~result; notifications
+  with e ->
+    let e, info = Exninfo.capture e in
+    let code = Lsp.LspData.Error.requestFailed in
+    let message = Pp.string_of_ppcmds @@ CErrors.iprint (e, info) in
+    output_json @@ mk_error_response ~id ~code ~message; []
 
-  let coqtopSearchResult ~id name statement =
-    let event = "vscoq/searchResult" in
-    let params = `Assoc [ "id", `String id; "name", `String name; "statement", `String statement ] in
-    output_json @@ mk_notification ~event ~params
+let coqtopSearchResult ~id name statement =
+  let event = "vscoq/searchResult" in
+  let params = `Assoc [ "id", `String id; "name", `String name; "statement", `String statement ] in
+  output_json @@ mk_notification ~event ~params
 
 let dispatch_method ~id method_name params : events =
   match method_name with

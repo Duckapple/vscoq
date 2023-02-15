@@ -1,1 +1,1 @@
-val getCompletionItems : id:int -> params:Yojson.Basic.t -> unit 
+val getCompletionItems : id:'a -> 'b -> DocumentManager.state -> Lsp.LspData.Position.t -> (string * string * string) list
