@@ -8,14 +8,9 @@ let mk_hyp sigma d (env,l) =
   | CompactedDecl.LocalAssum (ids, typ) -> ids, typ
   | CompactedDecl.LocalDef (ids,c,typ) -> ids, typ
   in
-  let ids' = List.map (fun id -> `String (Names.Id.to_string id.Context.binder_name)) ids in
+  let ids' = List.map (fun id -> Names.Id.to_string id.Context.binder_name) ids in
   let typ' = pr_ltype_env env sigma typ in
-  (*let hyps2 = ids' |> List.map (fun id -> `Assoc [
-    "label", id;
-    "typeString", `String (Pp.string_of_ppcmds typ')
-  ]) in*)
-  let open CompletionItem in
-  let hyps = ids' |> List.map (fun id -> mk_completion_item sigma null null env null) in
+  let hyps = ids' |> List.map (fun id -> (id, Pp.string_of_ppcmds typ', "")) in
   (env', hyps @ l)
 
 let mk_hyps sigma goal =
@@ -32,7 +27,8 @@ let getCompletionItems ~id params st loc =
   let hypotheses =
     DocumentManager.get_proof st loc
     |> Option.map (fun Proof.{ goals; sigma; _ } -> Option.cata (mk_hyps sigma) [] (List.nth_opt goals 0)) in
-  let lemmas = DocumentManager.get_lemmas st loc in
+  let lemmasOption : CompletionItem.completion_item list option = DocumentManager.get_lemmas st loc in
+  let lemmas = lemmasOption |> Option.map (List.map CompletionItem.pp_completion_item) in
   [hypotheses; lemmas] 
   |> List.map (Option.default [])
   |> List.flatten
