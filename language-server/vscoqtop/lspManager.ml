@@ -158,7 +158,6 @@ let send_highlights uri doc =
   in
   output_json @@ mk_notification ~event:"vscoq/updateHighlights" ~params
 
-
 let update_view uri st =
   send_highlights uri st;
   publish_diagnostics uri st
@@ -256,7 +255,6 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
     `Assoc [
         "completionItems", `List (List.map make_label labels)
       ]
-  
 
   let coqtopGetCompletionItems ~id params =
     let open Yojson.Basic.Util in
@@ -266,6 +264,8 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
     let st = Hashtbl.find states uri in
     let completionItems = Dm.CompletionSuggester.getCompletionItems ~id params st loc in
     let result = `Assoc ["completionItems", `List (completionItems |> List.map make_label_from_tuple)] in
+    output_json @@ mk_response ~id ~result
+
 let coqtopGetDeclarationLocation ~id params =
   let open Yojson.Basic.Util in
   let textDocument = params |> member "textDocument" in
