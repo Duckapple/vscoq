@@ -127,7 +127,7 @@ let parse_loc json =
   let char = json |> member "character" |> to_int in
   Position.{ line ; char }
 
-  let make_loc Position.{ line; char }  = 
+let make_loc Position.{ line; char }  = 
   `Assoc [
     "line", `Int line;
     "character", `Int char;
