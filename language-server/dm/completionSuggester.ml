@@ -1,13 +1,21 @@
 module CompactedDecl = Context.Compacted.Declaration
 open Printer
 open EConstr
-
+open Names
 module TypeCompare = struct
   type t = types
   let compare = compare
 end
 
 module Atomics = Set.Make(TypeCompare)
+
+module GROrd = struct
+  include Names.GlobRef.CanOrd
+  let show x = Pp.string_of_ppcmds (Printer.pr_global x)
+  let pp fmt x = Format.fprintf fmt "%a" Pp.pp_with (Printer.pr_global x)
+end
+module GRMap = Map.Make(GROrd)
+module GRSet = Set.Make(GROrd)
 
 let mk_hyp sigma d (env,l) =
   let d' = CompactedDecl.to_named_context d in
@@ -30,6 +38,64 @@ let get_goal_type st loc =
   let evi = Evd.find_undefined sigma goal in
   let env = Evd.evar_filtered_env (Global.env ()) evi in
   (Evd.evar_concl evi, sigma, env)
+
+let grefs_of_term sigma t add_to_acc acc =
+  let open GlobRef in
+  let open Constr in
+  let rec aux acc c =
+    match EConstr.kind sigma c with
+      | Var x -> add_to_acc (VarRef x) acc
+      | Const (c,_) -> add_to_acc (ConstRef c) acc
+      | Ind (i,_) -> add_to_acc (IndRef i) acc
+      | Construct (k,_) -> add_to_acc (ConstructRef k) acc
+      | _ -> EConstr.fold sigma aux acc c
+  in
+    aux acc t
+
+let dep1 ?inside sigma env gr =
+  let open GlobRef in
+  let modpath_of_gref = function
+    | VarRef _ -> Safe_typing.current_modpath (Global.safe_env ())
+    | IndRef (i,_) -> MutInd.modpath i
+    | ConstructRef ((i,_),_) -> MutInd.modpath i
+    | ConstRef c -> Constant.modpath c in
+  let add_if_inside =
+    match inside with
+    | None -> GRSet.add
+    | Some modpath -> fun x acc ->
+        if ModPath.equal (modpath_of_gref x) modpath
+        then GRSet.add x acc
+        else acc in
+  let add acc t = grefs_of_term sigma (EConstr.of_constr t) add_if_inside acc in
+  GRSet.remove gr @@
+  try
+    match gr with
+    | VarRef id ->
+        let decl = Environ.lookup_named id env in
+        let ty = Context.Named.Declaration.get_type decl in
+        let bo = Context.Named.Declaration.get_value decl in
+        let l =
+          match bo with
+          | None -> [ty]
+          | Some bo -> [ty; bo] in
+        List.fold_left add GRSet.empty l
+    | ConstRef cst ->
+        let cb = Environ.lookup_constant cst env in
+        let ty = cb.Declarations.const_type in
+        let bo = Global.body_of_constant_body Library.indirect_accessor cb in
+        let l =
+          match bo with
+          | Some (e,_,_) -> [ty; e]
+          | None -> [ty] in
+        List.fold_left add GRSet.empty l
+    | IndRef i | ConstructRef (i,_) ->
+        let _, indbody = Global.lookup_inductive i in
+        let l = indbody.Declarations.mind_user_lc in
+        CArray.fold_left add GRSet.empty l    
+  with exn -> 
+    Printf.eprintf "Failed :(\n"; 
+    GRSet.empty 
+    
 
 let kind_of_type_opt sigma t = try Some (kind_of_type sigma t) with exn -> None 
 
@@ -120,6 +186,12 @@ let get_completion_items ~id params st loc =
   let hypotheses = get_hyps st loc in
   let lemmasOption = DocumentManager.get_lemmas st loc in
   let goal, sigma, env = get_goal_type st loc in
+  Option.iter (fun l -> List.iter (fun (v : CompletionItems.completion_item) -> 
+    let grefs = dep1 v.sigma v.env v.ref in
+    Printf.eprintf "%s:\n" (Pp.string_of_ppcmds (pr_global v.ref));
+    Seq.iter (fun g -> Printf.eprintf "  %s\n" (Pp.string_of_ppcmds (pr_global g))) (GRSet.to_seq grefs);
+    ()
+    ) l) lemmasOption;
   let lemmas = lemmasOption |> Option.map 
     (fun l -> 
       rank_choices goal sigma env l |> 
