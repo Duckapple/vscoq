@@ -28,8 +28,10 @@ module CompletionItem : sig
   (* See https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_completion *)
   type t = {
     label : string;
+    insertText : string option;
     detail : string option;
     documentation : string option;
+    sortText : string option;
   } [@@deriving yojson]
 end
 
@@ -184,9 +186,20 @@ module Settings : sig
       } [@@deriving yojson] [@@yojson.allow_extra_fields]
     
     end
+
+    module RankingAlgoritm : sig
+      type t = 
+      | SimpleTypeIntersection
+      | SplitTypeIntersection
+      | StructuredTypeEvaluation
+      | SelectiveUnification
+      | SelectiveSplitUnification
+      [@@deriving yojson]
+    end
   
     type t = {
       proof: Proof.t;
+      ranking: RankingAlgoritm.t;
     } [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   

@@ -114,6 +114,26 @@
         "title": "Proof checking",
         "type": "object",
         "properties": {
+          "vscoq.ranking": {
+            "scope": "window",
+            "type": "number",
+            "enum": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "enumItemLabels": [
+                "SimpleTypeIntersection",
+                "SplitTypeIntersection",
+                "StructuredTypeEvaluation",
+                "SelectiveUnification",
+                "SelectiveSplitUnification"
+            ],
+            "default": 4,
+            "description": "Configures the ranking algorithm for auto completions in Coq."
+          },
           "vscoq.proof.mode": {
             "scope": "window",
             "type": "number",

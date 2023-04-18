@@ -43,8 +43,10 @@ module CompletionItem = struct
 
   type t = {
     label : string;
+    insertText : string option [@yojson.option];
     detail : string option [@yojson.option];
     documentation : string option [@yojson.option];
+    sortText : string option [@yojson.option];
   } [@@deriving yojson]
 
 end
@@ -226,6 +228,32 @@ module Settings = struct
   
   end
 
+  module RankingAlgoritm = struct
+
+    type t = 
+    | SimpleTypeIntersection
+    | SplitTypeIntersection
+    | StructuredTypeEvaluation
+    | SelectiveUnification
+    | SelectiveSplitUnification
+
+    let yojson_of_t = function
+    | SimpleTypeIntersection -> `Int 0
+    | SplitTypeIntersection -> `Int 1
+    | StructuredTypeEvaluation -> `Int 2
+    | SelectiveUnification -> `Int 3
+    | SelectiveSplitUnification -> `Int 4
+
+    let t_of_yojson = function
+    | `Int 0 -> SimpleTypeIntersection
+    | `Int 1 -> SplitTypeIntersection
+    | `Int 2 -> StructuredTypeEvaluation
+    | `Int 3 -> SelectiveUnification
+    | `Int 4 -> SelectiveSplitUnification
+    | _ -> Yojson.json_error @@ "invalid value "
+
+  end
+
   module Proof = struct
 
     type t = {
@@ -238,6 +266,7 @@ module Settings = struct
 
   type t = {
     proof: Proof.t;
+    ranking: RankingAlgoritm.t;
   } [@@deriving yojson] [@@yojson.allow_extra_fields]
 
 end

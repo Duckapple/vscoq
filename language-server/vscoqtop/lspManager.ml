@@ -34,6 +34,10 @@ let check_mode = ref Settings.Mode.Continuous
 
 let Dm.Types.Log log = Dm.Log.mk_log "lspManager"
 
+let algorithm = ref Settings.RankingAlgoritm.SelectiveUnification
+
+let lsp_debug = CDebug.create ~name:"vscoq.lspManager" ()
+
 let conf_request_id = 3456736879
 
 let server_info = ServerInfo.{
@@ -64,7 +68,7 @@ let lsp : event Sel.event =
       end
     | Error exn ->
         log @@ ("failed to read message: " ^ Printexc.to_string exn);
-        (*this line is sacred*)
+        (*this line is sacred*) 
         exit(0))
   |> fst
   |> Sel.name "lsp"
@@ -88,7 +92,8 @@ let do_configuration settings =
     | Delegate -> { delegation_mode = DelegateProofsToWorkers { number_of_workers = Option.get settings.proof.workers } }
   in
   Dm.ExecutionManager.set_options options;
-  check_mode := settings.proof.mode
+  check_mode := settings.proof.mode;
+  algorithm := settings.ranking
 
 let send_configuration_request () =
   let id = conf_request_id in
@@ -275,11 +280,13 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
   update_view uri st;
   (uri,events)
   
-  let make_CompletionItem (label, typ, path) : CompletionItem.t = 
+  let make_CompletionItem i (label, insertText, typ, path) : CompletionItem.t = 
     {
       label;
+      insertText = Some insertText;
       detail = Some typ;
       documentation = Some ("Path: " ^ path);
+      sortText = Some (Printf.sprintf "%5d" i);
     } 
 
   let textDocumentCompletion ~id params =
@@ -288,11 +295,17 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
     let uri = textDocument |> member "uri" |> to_string in
     let loc = params |> member "position" |> parse_loc in
     let st = Hashtbl.find states uri in
-    let completionItems = Dm.CompletionSuggester.get_completion_items ~id params st loc in
-    let items = List.map make_CompletionItem completionItems in
-    let result = Ok (CompletionList.yojson_of_t {isIncomplete = false; items = items;}) in
-    output_json @@ Response.(yojson_of_t { id; result })
-
+    match Dm.CompletionSuggester.get_completion_items ~id params st loc !algorithm with
+    | Ok completionItems -> 
+      let items = List.mapi make_CompletionItem completionItems in
+      let result = Ok (CompletionList.yojson_of_t {isIncomplete = false; items = items;}) in
+      output_json @@ Response.(yojson_of_t { id; result })
+    | Error e -> 
+      let code = Lsp.LspData.Error.requestFailed in
+      let message = e in
+      let error = Response.Error.{ code; message } in
+      output_json @@ Response.(yojson_of_t { id; result = Error error})
+      
 let coqtopResetCoq ~id params =
   let open Yojson.Safe.Util in
   let uri = params |> member "uri" |> to_string in
