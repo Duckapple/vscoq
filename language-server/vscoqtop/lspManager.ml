@@ -302,9 +302,19 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
       output_json @@ Response.(yojson_of_t { id; result })
     | Error e -> 
       let code = Lsp.LspData.Error.requestFailed in
-      let message = e in
-      let error = Response.Error.{ code; message } in
-      output_json @@ Response.(yojson_of_t { id; result = Error error})
+      let range = (Dm.DocumentManager.executed_ranges st).checked in
+      if range == [] || (List.nth range ((List.length range) - 1)).end_ > loc then
+        let message = e in
+        let error = Response.Error.{ code; message } in
+        output_json @@ Response.(yojson_of_t { id; result = Error error})
+      else
+        let last = List.nth range ((List.length range) - 1) in
+        let pos = last.end_ in
+        let extraMessage = (Printf.sprintf "\nError: Tried to complete at (%d, %d), but last executed loc is (%d, %d)\n" loc.line loc.character pos.line pos.character) in
+        let message = e ^ extraMessage in
+        let error = Response.Error.{ code; message } in
+        output_json @@ Response.(yojson_of_t { id; result = Error error})
+
       
 let coqtopResetCoq ~id params =
   let open Yojson.Safe.Util in

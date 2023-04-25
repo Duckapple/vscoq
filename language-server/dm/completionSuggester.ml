@@ -318,7 +318,8 @@ let get_completion_items ~id params st loc algorithm =
   try 
     let open Yojson.Basic.Util in
     match get_goal_type_option st (Some loc), DocumentManager.get_lemmas st loc with
-    | None, _ | _ , None -> Error ("Error in creating completion items")
+    | None, _ -> Error ("Error in creating completion items because GOAL could not be found")
+    | _ , None -> Error ("Error in creating completion items because LEMMAS could not be found")
     | Some (goal, sigma, env), Some lemmas ->
       rank_choices algorithm goal sigma env lemmas
       |> take 10000 
