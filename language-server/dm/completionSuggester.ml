@@ -71,11 +71,6 @@ module SimpleAtomics = struct
     aux t |>
     Atomics.of_list
 
-  let debug_print_atomics env sigma atomics = 
-    Atomics.fold (fun t l -> (Pp.string_of_ppcmds (pr_econstr_env env sigma t ) |> Printf.sprintf "%s") :: l) atomics [] |>
-    String.concat "," |>
-    Printf.eprintf "Atomics: [%s]\n"
-
   let compare_atomics (goal : Atomics.t) (a1, _ : Atomics.t * _) (a2, _ : Atomics.t * _) : int = 
     match (Atomics.inter a1 goal, Atomics.inter a2 goal) with
     | r1, r2 when Atomics.cardinal r1 = Atomics.cardinal r2 -> 
@@ -151,46 +146,6 @@ module Structured = struct
     in
     aux [] t
 
-  let debug_print_cast env sigma t : unit = 
-    let rec aux i u = 
-      Printf.eprintf "%s" (String.init i (fun _ -> ' '));
-      match kind sigma u with
-      | Sort s -> Printf.eprintf "SortUniType: ";
-        (match ESorts.kind sigma s with 
-        | SProp -> Printf.eprintf "SProp\n";
-        | Prop -> Printf.eprintf "Prop\n";
-        | Set  -> Printf.eprintf "Set\n";
-        | Type u -> Printf.eprintf "Type\n";
-        | QSort (u, l) -> Printf.eprintf "QSort\n";
-        )
-      | Cast (c,_,t) -> Printf.eprintf "cast: %s, %s\n" 
-        (Pp.string_of_ppcmds (pr_econstr_env env sigma c))
-        (Pp.string_of_ppcmds (pr_econstr_env env sigma t))
-      | Prod (na,t,c) -> Printf.eprintf "Prod: %s, %s\n" 
-        (Pp.string_of_ppcmds (pr_econstr_env env sigma t))
-        (Pp.string_of_ppcmds (pr_econstr_env env sigma c));
-        aux (i+1) t;
-        aux (i+1) c
-      | LetIn (name,b,t,c) -> 
-        Printf.eprintf "LetIn: %s, %s, %s\n" 
-          (Pp.string_of_ppcmds (pr_econstr_env env sigma b))
-          (Pp.string_of_ppcmds (pr_econstr_env env sigma t))
-          (Pp.string_of_ppcmds (pr_econstr_env env sigma c));
-        aux (i+1) t;
-        aux (i+1) c;
-        aux (i+1) b
-      | App (c,l) -> 
-        Printf.eprintf "App: %s\n" 
-          (Pp.string_of_ppcmds (pr_econstr_env env sigma c));
-        Array.iter (aux (i+1)) l
-      | Rel i -> Printf.eprintf "Rel: %d\n" i
-      | (Meta _ | Var _ | Evar _ | Const _
-      | Proj _ | Case _ | Fix _ | CoFix _ | Ind _) -> ()
-      | (Lambda _ | Construct _ | Int _ | Float _ | Array _) -> ()
-    in
-    aux 0 t;
-    Printf.eprintf "has_cast: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma t))
-
   let has_cast env sigma (t : types) : bool =
     let rec aux t = match kind sigma t with
       | Sort s -> false
@@ -207,46 +162,6 @@ module Structured = struct
       | (Lambda _ | Construct _ | Int _ | Float _ | Array _) -> false
     in
     aux t
-
-  let debug_print_unifier env sigma t : unit = 
-    let rec aux i u =
-      Printf.eprintf "%s" (String.init i (fun _ -> ' '));
-      match u with
-      | SortUniType (s, i) -> Printf.eprintf "SortUniType (%d): " i;
-        (match ESorts.kind sigma s with 
-        | SProp -> Printf.eprintf "SProp\n";
-        | Prop -> Printf.eprintf "Prop\n";
-        | Set  -> Printf.eprintf "Set\n";
-        | Type u -> Printf.eprintf "Type\n";
-        | QSort (u, l) -> Printf.eprintf "QSort\n";
-        )
-      | AtomicUniType (t, ua) -> 
-        Printf.eprintf "AtomicUniType %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma t));
-        Array.iter (fun u -> aux (i + 1) u) ua
-    in
-    Option.iter (aux 0) (unifier_kind sigma t)
-
-  let debug_print_kind_of_type sigma env k: unit = 
-    let rec aux i k = 
-      Printf.eprintf "%s" (String.init i (fun _ -> ' '));
-      match k with
-      | Some SortType t -> 
-        Printf.eprintf "SortType\n"; 
-      | Some CastType (tt, t) ->
-        Printf.eprintf "CastType\n"; 
-      | Some ProdType (n, t1, t2) ->
-        Printf.eprintf "ProdType %s\n" (Names.Name.print n.binder_name |> Pp.string_of_ppcmds); 
-        aux (i+1) (type_kind_opt sigma t1);
-        aux (i+1) (type_kind_opt sigma t2);
-      | Some LetInType _ ->
-        Printf.eprintf "LetInType\n"; 
-      | Some AtomicType (t, ta) -> 
-        Printf.eprintf "AtomicType %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma t)); 
-        Array.iter (fun t -> type_kind_opt sigma t |> aux (i+1)) ta;
-      | None -> () (* Lol :) *)
-      in
-    aux 0 k
-
   let rec matches evd (u1: unifier) (u2: unifier) =
     match (u1, u2) with
     | SortUniType (s1, _), SortUniType (s2, _) -> 
@@ -315,9 +230,6 @@ module Structured = struct
   (* The 5 value is just a placeholder and has not been beenchmarked *)
 
   let rank use_um (goal : Evd.econstr) sigma env lemmas : CompletionItems.completion_item list =
-    Printf.eprintf "Goal\n:";
-    debug_print_unifier env sigma goal;
-    List.iter (fun (l : CompletionItems.completion_item) -> if has_cast env sigma (of_constr l.typ) then debug_print_cast env sigma (of_constr l.typ)) lemmas;
     match unifier_kind sigma goal with
     | None -> lemmas
     | Some goalUnf -> 
@@ -333,15 +245,11 @@ module Structured = struct
           (final, l)
       ) lemmas in
       let sorted = List.stable_sort (fun (x, _) (y, _) -> Float.compare x y) lemmaUnfs in
-      Printf.eprintf "Best Result:\n";
-      debug_print_unifier env sigma (List.nth sorted 0 |> snd |> (fun v -> v.typ)|> of_constr);
-      debug_print_kind_of_type sigma env (List.nth sorted 0 |> snd |> (fun v -> v.typ)|> of_constr |> type_kind_opt sigma);
       List.map snd sorted
 end
 
 module SelectiveUnification = struct
   let realRank (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
-    Printf.eprintf "running unification on %d elements\n" (List.length lemmas);
     let aux (lemma : CompletionItems.completion_item) =
       let flags = Evarconv.default_flags_of TransparentState.full in
       let res = Evarconv.evar_conv_x flags env sigma Reduction.CONV goal (of_constr lemma.typ) in
@@ -367,7 +275,6 @@ end
 
 module SelectiveSplitUnification = struct
   let realRank (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
-    Printf.eprintf "running better unification on %d elements\n" (List.length lemmas);
     let make_sortable (lemma : CompletionItems.completion_item) =
       let flags = Evarconv.default_flags_of TransparentState.full in
       let rec aux (iterations: int) (typ : types) : (CompletionItems.completion_item * int)=
