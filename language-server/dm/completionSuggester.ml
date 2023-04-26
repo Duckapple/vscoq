@@ -61,7 +61,7 @@ module SimpleAtomics = struct
     let rec aux t : types list = 
       match (type_kind_opt sigma t) with
       | Some SortType t -> [] (* Might be possible to get atomics from also *)
-      | Some CastType (tt, t) -> [] (* Dont know if we need this *)
+      | Some CastType (tt, t) -> aux tt @ aux t
       | Some ProdType (n, t1, t2) -> aux t1 @ aux t2
       | Some LetInType _ -> [] 
       | Some AtomicType (t, ta) ->
@@ -132,7 +132,7 @@ module Structured = struct
   let unifier_kind sigma (t : types) : unifier option =
     let rec aux bruijn t = match kind sigma t with
       | Sort s -> SortUniType (s, List.length bruijn) |> Option.make
-      | Cast (c,_,t) -> None
+      | Cast (c,_,t) -> aux bruijn c
       | Prod (na,t,c) -> aux (aux bruijn t :: bruijn) c (* Possibly the index should be assigned here instead and be a thing for both types. *)
       | LetIn (name,b,t,c) -> aux (aux bruijn t :: bruijn) c
       | App (c,l) -> 
@@ -266,7 +266,7 @@ module SelectiveUnification = struct
   
   let selectiveRank use_um (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
     let ranked = Structured.rank use_um goal sigma env lemmas in
-    let take, skip = takeSkip 1000 ranked in
+    let take, skip = takeSkip 100 ranked in
     List.append (realRank goal sigma env take) skip
 
 
@@ -297,7 +297,7 @@ module SelectiveSplitUnification = struct
 
   let selectiveRank use_um (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
     let ranked = Structured.rank use_um goal sigma env lemmas in
-    let take, skip = takeSkip 1000 ranked in
+    let take, skip = takeSkip 100 ranked in
     List.append (realRank goal sigma env take) skip
 
 
@@ -322,7 +322,7 @@ let get_completion_items ~id params st loc algorithm =
     | _ , None -> Error ("Error in creating completion items because LEMMAS could not be found")
     | Some (goal, sigma, env), Some lemmas ->
       rank_choices algorithm goal sigma env lemmas
-      |> take 10000 
+      |> take 100
       |> List.map (CompletionItems.pp_completion_item) 
       |> Result.ok
   with e -> 
