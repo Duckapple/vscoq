@@ -63,6 +63,7 @@ let lsp : event Sel.event =
         log "UI req ready";
         try LspManagerEvent (Request (Some (Yojson.Safe.from_string (Bytes.to_string buff))))
         with exn ->
+          Printf.eprintf "Error in decoding json: %s\n%!" (Printexc.to_string exn);
           log @@ "failed to decode json";
           LspManagerEvent (Request None)
       end
