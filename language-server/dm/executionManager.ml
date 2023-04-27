@@ -524,11 +524,12 @@ let get_context st id =
   | None -> log "Cannot find state for get_context"; None
   | Some (Error _) -> log "Context requested in error state"; None
   | Some (Success None) -> log "Context requested in a remotely checked state"; None
-  | Some (Success (Some { interp = { Vernacstate.Interp.lemmas = Some st; _ } })) ->
+  | Some (Success (Some { interp = st })) when Option.has_some st.lemmas  ->
     let open Proof in
     let open Declare in
     let open Vernacstate in
-    st |> LemmaStack.with_top ~f:Proof.get_current_context |> Option.make
+    Vernacstate.Interp.unfreeze_interp_state st;
+    Option.get st.lemmas |> LemmaStack.with_top ~f:Proof.get_current_context |> Option.make
   | Some (Success (Some { interp = st })) ->
     Vernacstate.Interp.unfreeze_interp_state st;
     let env = Global.env () in
