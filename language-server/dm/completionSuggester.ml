@@ -181,10 +181,8 @@ module Structured = struct
         in
         aux (Array.to_list ua1) (Array.to_list ua2)
       else false
-
-  let atomicMatchFactor = 2.0
   
-  let score_unifier use_um evd (goal : unifier) (u : unifier) : float =
+  let score_unifier use_um atomic_factor evd (goal : unifier) (u : unifier) : float =
     let rec aux (um : unifier UM.t) g u  : (float * unifier UM.t) = 
     match (g, u) with
       | SortUniType (s1, i1), SortUniType (s2, i2) -> if ESorts.equal evd s1 s2 then (1., um) else (0., um)
@@ -196,7 +194,7 @@ module Structured = struct
           matches evd u (SortUniType (s, i)) |> Bool.to_float |> fun x -> (x, um)
         else (1., if use_um then UM.add i u um else um)
       | AtomicUniType (t1, ua1), AtomicUniType (t2, ua2) -> 
-        let c = EConstr.compare_constr evd (EConstr.eq_constr evd) t1 t2 |> Bool.to_float |> (Float.mul atomicMatchFactor) in
+        let c = EConstr.compare_constr evd (EConstr.eq_constr evd) t1 t2 |> Bool.to_float |> (Float.mul atomic_factor) in
         if Array.length ua1 <> Array.length ua2 then (c, um)
         else 
           let (score, um) = Array.fold_left (fun (acc, um) (u1, u2) -> 
@@ -225,11 +223,10 @@ module Structured = struct
     in
     aux u
 
-  let finalScore score size = Float.sub size (Float.mul score 5.) 
   (* A Lower score is better as we are sorting in ascending order *)
-  (* The 5 value is just a placeholder and has not been beenchmarked *)
 
-  let rank use_um (goal : Evd.econstr) sigma env lemmas : CompletionItems.completion_item list =
+  let rank use_um (size_impact, atomic_factor) (goal : Evd.econstr) sigma env lemmas : CompletionItems.completion_item list =
+    let finalScore score size = Float.sub size (Float.mul score size_impact) in
     match unifier_kind sigma goal with
     | None -> lemmas
     | Some goalUnf -> 
@@ -237,7 +234,7 @@ module Structured = struct
         match (unifier_kind sigma (of_constr l.typ)) with
         | None -> ((Float.min_float), l)
         | Some unf -> 
-          let scores = List.map (score_unifier use_um sigma goalUnf) (unpack_unifier unf) in
+          let scores = List.map (score_unifier use_um atomic_factor sigma goalUnf) (unpack_unifier unf) in
           let size = size_unifier unf |> Int32.to_float in
           let maxScore = List.fold_left Float.max 0. scores in
           let final = finalScore maxScore size in
@@ -264,8 +261,8 @@ module SelectiveUnification = struct
     |> List.stable_sort (fun a b -> compare (snd a) (snd b))
     |> List.map fst
   
-  let selectiveRank use_um (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
-    let ranked = Structured.rank use_um goal sigma env lemmas in
+  let selectiveRank use_um algorithm_factor (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
+    let ranked = Structured.rank use_um algorithm_factor goal sigma env lemmas in
     let take, skip = takeSkip 100 ranked in
     List.append (realRank goal sigma env take) skip
 
@@ -295,8 +292,8 @@ module SelectiveSplitUnification = struct
     |> List.stable_sort (fun a b -> compare (snd a) (snd b))
     |> List.map fst
 
-  let selectiveRank use_um (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
-    let ranked = Structured.rank use_um goal sigma env lemmas in
+  let selectiveRank use_um algorithm_factor (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
+    let ranked = Structured.rank use_um algorithm_factor goal sigma env lemmas in
     let take, skip = takeSkip 100 ranked in
     List.append (realRank goal sigma env take) skip
 
@@ -304,24 +301,25 @@ module SelectiveSplitUnification = struct
   let rank = selectiveRank
 end
 
-let rank_choices algorithm = 
+let rank_choices algorithm algorithm_factor = 
   let open Lsp.LspData.Settings.RankingAlgoritm in
   match algorithm with
   | SimpleTypeIntersection -> SimpleAtomics.rank
   | SplitTypeIntersection -> Split.rank
-  | StructuredTypeEvaluation -> Structured.rank true
-  | SelectiveUnification -> SelectiveUnification.rank true
-  | SelectiveSplitUnification -> SelectiveSplitUnification.rank true
+  | StructuredTypeEvaluation -> Structured.rank true algorithm_factor
+  | SelectiveUnification -> SelectiveUnification.rank true algorithm_factor
+  | SelectiveSplitUnification -> SelectiveSplitUnification.rank true algorithm_factor
+  | Basic -> fun _ _ _ x -> x 
  
 
-let get_completion_items ~id params st loc algorithm =
+let get_completion_items ~id params st loc algorithm algorithm_factor =
   try 
     let open Yojson.Basic.Util in
     match get_goal_type_option st (Some loc), DocumentManager.get_lemmas st loc with
     | None, _ -> Error ("Error in creating completion items because GOAL could not be found")
     | _ , None -> Error ("Error in creating completion items because LEMMAS could not be found")
     | Some (goal, sigma, env), Some lemmas ->
-      rank_choices algorithm goal sigma env lemmas
+      rank_choices algorithm algorithm_factor goal sigma env lemmas
       |> take 100
       |> List.map (CompletionItems.pp_completion_item) 
       |> Result.ok

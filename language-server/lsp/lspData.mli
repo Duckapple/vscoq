@@ -189,6 +189,7 @@ module Settings : sig
 
     module RankingAlgoritm : sig
       type t = 
+      | Basic
       | SimpleTypeIntersection
       | SplitTypeIntersection
       | StructuredTypeEvaluation
@@ -200,6 +201,8 @@ module Settings : sig
     type t = {
       proof: Proof.t;
       ranking: RankingAlgoritm.t;
+      rankingFactor: float;
+      sizeFactor: float;
     } [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   
