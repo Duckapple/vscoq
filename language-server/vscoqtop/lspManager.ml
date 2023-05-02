@@ -36,6 +36,10 @@ let Dm.Types.Log log = Dm.Log.mk_log "lspManager"
 
 let algorithm = ref Settings.RankingAlgoritm.SelectiveUnification
 
+let algoritm_factor = ref 5.0
+
+let size_factor = ref 2.0
+
 let lsp_debug = CDebug.create ~name:"vscoq.lspManager" ()
 
 let conf_request_id = 3456736879
@@ -94,7 +98,9 @@ let do_configuration settings =
   in
   Dm.ExecutionManager.set_options options;
   check_mode := settings.proof.mode;
-  algorithm := settings.ranking
+  algorithm := settings.ranking;
+  algoritm_factor := settings.rankingFactor;
+  size_factor := settings.sizeFactor
 
 let send_configuration_request () =
   let id = conf_request_id in
@@ -169,7 +175,8 @@ let send_highlights uri doc =
   let method_ = "vscoq/updateHighlights" in
   output_json @@ Notification.(yojson_of_t { method_; params })
 
-let update_view uri st = ()
+let update_view uri st = 
+  publish_diagnostics uri st
 
 let send_proof_view ~id st loc = 
   let result = match Dm.DocumentManager.get_proof st loc with
@@ -294,7 +301,7 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
     let uri = textDocument |> member "uri" |> to_string in
     let loc = params |> member "position" |> parse_loc in
     let st = Hashtbl.find states uri in
-    match Dm.CompletionSuggester.get_completion_items ~id params st loc !algorithm with
+    match Dm.CompletionSuggester.get_completion_items ~id params st loc !algorithm (!algoritm_factor, !size_factor) with
     | Ok completionItems -> 
       let items = List.mapi make_CompletionItem completionItems in
       let result = Ok (CompletionList.yojson_of_t {isIncomplete = false; items = items;}) in
