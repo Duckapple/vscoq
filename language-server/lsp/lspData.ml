@@ -270,8 +270,9 @@ module Settings = struct
   type t = {
     proof: Proof.t;
     ranking: RankingAlgoritm.t;
-    rankingFactor : float;
-    sizeFactor : float;
+    rankingFactor : float option [@yojson.option];
+    sizeFactor : float option [@yojson.option];
+    enableDiag: bool option [@yojson.option];
   } [@@deriving yojson] [@@yojson.allow_extra_fields]
 
 end

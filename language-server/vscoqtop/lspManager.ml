@@ -40,6 +40,8 @@ let algoritm_factor = ref 5.0
 
 let size_factor = ref 2.0
 
+let enable_diag = ref false
+
 let lsp_debug = CDebug.create ~name:"vscoq.lspManager" ()
 
 let conf_request_id = 3456736879
@@ -87,6 +89,10 @@ let output_json ?(trace=true) obj =
   log @@ "sent: " ^ msg;
   ignore(Unix.write_substring Unix.stdout s 0 (String.length s)) (* TODO ERROR *)
 
+let assign_if reff = function
+  | Some v -> reff := v
+  | None -> ()
+
 let do_configuration settings = 
   let open Settings in
   let open Dm.ExecutionManager in
@@ -99,8 +105,9 @@ let do_configuration settings =
   Dm.ExecutionManager.set_options options;
   check_mode := settings.proof.mode;
   algorithm := settings.ranking;
-  algoritm_factor := settings.rankingFactor;
-  size_factor := settings.sizeFactor
+  assign_if algoritm_factor settings.rankingFactor;
+  assign_if size_factor settings.sizeFactor;
+  assign_if enable_diag settings.enableDiag
 
 let send_configuration_request () =
   let id = conf_request_id in
@@ -115,6 +122,7 @@ let send_configuration_request () =
 let do_initialize ~id params =
   let open Settings in
   let open Yojson.Safe.Util in
+  Printf.eprintf "%s" @@ Yojson.Safe.pretty_to_string @@ member "initializationOptions" params;
   let settings = params |> member "initializationOptions" |> Settings.t_of_yojson in
   do_configuration settings;
   let capabilities = ServerCapabilities.{
@@ -175,8 +183,12 @@ let send_highlights uri doc =
   let method_ = "vscoq/updateHighlights" in
   output_json @@ Notification.(yojson_of_t { method_; params })
 
-let update_view uri st = 
-  publish_diagnostics uri st
+let update_view uri st =
+  if !enable_diag then (
+    send_highlights uri st;
+    publish_diagnostics uri st
+  )
+  else ()
 
 let send_proof_view ~id st loc = 
   let result = match Dm.DocumentManager.get_proof st loc with
@@ -498,8 +510,11 @@ let handle_lsp_event = function
       end
 
 let pr_lsp_event = function
-  | Request req ->
-    Pp.str "Request"
+  | Request Some req ->
+    (try
+      Pp.str @@ Yojson.Safe.pretty_to_string req
+    with e -> Pp.str "Request")
+  | _ -> Pp.str "Request"
 
 let output_notification = function
 | QueryResultNotification params ->

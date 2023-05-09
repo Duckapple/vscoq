@@ -134,6 +134,12 @@
             "default": 4,
             "description": "Configures the ranking algorithm for auto completions in Coq."
           },
+          "vscoq.enableDiag": {
+            "scope": "window",
+            "type": "boolean",
+            "default": true,
+            "description": "Enable or disable diagnostics entirely."
+          },
           "vscoq.proof.mode": {
             "scope": "window",
             "type": "number",

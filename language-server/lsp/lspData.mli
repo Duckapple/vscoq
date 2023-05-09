@@ -201,8 +201,9 @@ module Settings : sig
     type t = {
       proof: Proof.t;
       ranking: RankingAlgoritm.t;
-      rankingFactor: float;
-      sizeFactor: float;
+      rankingFactor: float option;
+      sizeFactor: float option;
+      enableDiag: bool option;
     } [@@deriving yojson] [@@yojson.allow_extra_fields]
 
   
