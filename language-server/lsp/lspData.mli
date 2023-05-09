@@ -195,6 +195,8 @@ module Settings : sig
       | StructuredTypeEvaluation
       | SelectiveUnification
       | SelectiveSplitUnification
+      | SimpleUnification
+      | SimpleSplitUnification
       [@@deriving yojson]
     end
   

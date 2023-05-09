@@ -261,11 +261,9 @@ module SelectiveUnification = struct
     |> List.stable_sort (fun a b -> compare (snd a) (snd b))
     |> List.map fst
   
-  let selectiveRank use_um algorithm_factor (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
-    let ranked = Structured.rank use_um algorithm_factor goal sigma env lemmas in
-    let take, skip = takeSkip 100 ranked in
+  let selectiveRank (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
+    let take, skip = takeSkip 100 lemmas in
     List.append (realRank goal sigma env take) skip
-
 
   let rank = selectiveRank
 end
@@ -292,24 +290,24 @@ module SelectiveSplitUnification = struct
     |> List.stable_sort (fun a b -> compare (snd a) (snd b))
     |> List.map fst
 
-  let selectiveRank use_um algorithm_factor (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
-    let ranked = Structured.rank use_um algorithm_factor goal sigma env lemmas in
-    let take, skip = takeSkip 100 ranked in
+  let selectiveRank (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
+    let take, skip = takeSkip 100 lemmas in
     List.append (realRank goal sigma env take) skip
-
 
   let rank = selectiveRank
 end
 
-let rank_choices algorithm algorithm_factor = 
+let rank_choices algorithm algorithm_factor goal sigma env lemmas = 
   let open Lsp.LspData.Settings.RankingAlgoritm in
   match algorithm with
-  | SimpleTypeIntersection -> SimpleAtomics.rank
-  | SplitTypeIntersection -> Split.rank
-  | StructuredTypeEvaluation -> Structured.rank true algorithm_factor
-  | SelectiveUnification -> SelectiveUnification.rank true algorithm_factor
-  | SelectiveSplitUnification -> SelectiveSplitUnification.rank true algorithm_factor
-  | Basic -> fun _ _ _ x -> x 
+  | SimpleTypeIntersection -> SimpleAtomics.rank goal sigma env lemmas
+  | SplitTypeIntersection -> Split.rank goal sigma env lemmas
+  | StructuredTypeEvaluation -> Structured.rank true algorithm_factor goal sigma env lemmas
+  | SelectiveUnification -> SelectiveUnification.rank goal sigma env (Structured.rank true algorithm_factor goal sigma env lemmas)
+  | SelectiveSplitUnification -> SelectiveSplitUnification.rank goal sigma env (Structured.rank true algorithm_factor goal sigma env lemmas)
+  | SimpleUnification -> SelectiveUnification.rank goal sigma env (SimpleAtomics.rank goal sigma env lemmas)
+  | SimpleSplitUnification -> SelectiveSplitUnification.rank goal sigma env (SimpleAtomics.rank goal sigma env lemmas)
+  | Basic -> lemmas
  
 
 let get_completion_items ~id params st loc algorithm algorithm_factor =
@@ -320,7 +318,7 @@ let get_completion_items ~id params st loc algorithm algorithm_factor =
     | _ , None -> Error ("Error in creating completion items because LEMMAS could not be found")
     | Some (goal, sigma, env), Some lemmas ->
       rank_choices algorithm algorithm_factor goal sigma env lemmas
-      |> take 100
+      |> take 500
       |> List.map (CompletionItems.pp_completion_item) 
       |> Result.ok
   with e -> 
