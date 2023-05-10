@@ -56,6 +56,21 @@ let get_goal_type_option st loc =
 
 let type_kind_opt sigma t = try Some (kind_of_type sigma t) with exn -> None 
 
+let type_size sigma t : int = 
+  let rec aux u = 
+    match kind sigma u with
+    | Sort s -> 1
+    | Cast (c,_,t) -> aux c + aux t
+    | Prod (na,t,c) -> aux t + aux c
+    | LetIn (name,b,t,c) -> aux b + aux t + aux c
+    | App (c,l) -> Array.map aux l |> Array.fold_left (+) (aux c)
+    | Rel i -> 1
+    | (Meta _ | Var _ | Evar _ | Const _
+    | Proj _ | Case _ | Fix _ | CoFix _ | Ind _) -> 1
+    | (Lambda _ | Construct _ | Array _ | Int _ | Float _) -> 1
+  in
+  aux t
+
 module SimpleAtomics = struct
   let atomic_types sigma t: Atomics.t = 
     let rec aux t : types list = 
@@ -247,7 +262,10 @@ end
 
 module SelectiveUnification = struct
   let realRank (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
+    let goal_size = type_size sigma goal in
     let aux (lemma : CompletionItems.completion_item) =
+      if type_size sigma (of_constr lemma.typ) + goal_size > 500 then (lemma, 1)
+      else
       let flags = Evarconv.default_flags_of TransparentState.full in
       let res = Evarconv.evar_conv_x flags env sigma Reduction.CONV goal (of_constr lemma.typ) in
       match res with 
