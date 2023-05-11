@@ -167,7 +167,7 @@ module Structured = struct
       | Cast (c,_,t) -> true
       | Prod (na,t,c) -> aux t || aux c (* Possibly the index should be assigned here instead and be a thing for both types. *)
       | LetIn (name,b,t,c) -> aux t || aux c || aux b
-      | App (c,l) -> 
+      | App (c,l) ->
         let l' = Array.map (aux) l in
         Array.fold_left (||) (aux c) l'
       | Rel i -> false
@@ -288,9 +288,12 @@ end
 
 module SelectiveSplitUnification = struct
   let realRank (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
+    let goal_size = type_size sigma goal in
     let make_sortable (lemma : CompletionItems.completion_item) =
       let flags = Evarconv.default_flags_of TransparentState.full in
       let rec aux (iterations: int) (typ : types) : (CompletionItems.completion_item * int)=
+        if type_size sigma typ + goal_size > 500 then (lemma, 1)
+        else
         let res = Evarconv.evar_conv_x flags env sigma Reduction.CONV goal typ in
         match res with
         | Success evd ->
