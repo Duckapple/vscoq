@@ -34,7 +34,7 @@ let check_mode = ref Settings.Mode.Continuous
 
 let Dm.Types.Log log = Dm.Log.mk_log "lspManager"
 
-let algorithm = ref Settings.RankingAlgoritm.SelectiveUnification
+let algorithm = ref Settings.RankingAlgoritm.StructuredUnification
 
 let algoritm_factor = ref 5.0
 

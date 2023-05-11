@@ -329,10 +329,12 @@ let rank_choices algorithm algorithm_factor goal sigma env lemmas =
   | SimpleTypeIntersection -> SimpleAtomics.rank goal sigma env lemmas
   | SplitTypeIntersection -> Split.rank goal sigma env lemmas
   | StructuredTypeEvaluation -> Structured.rank true algorithm_factor goal sigma env lemmas
-  | SelectiveUnification -> SelectiveUnification.rank goal sigma env (Structured.rank true algorithm_factor goal sigma env lemmas)
-  | SelectiveSplitUnification -> SelectiveSplitUnification.rank goal sigma env (Structured.rank true algorithm_factor goal sigma env lemmas)
+  | StructuredUnification -> SelectiveUnification.rank goal sigma env (Structured.rank true algorithm_factor goal sigma env lemmas)
+  | StructuredSplitUnification -> SelectiveSplitUnification.rank goal sigma env (Structured.rank true algorithm_factor goal sigma env lemmas)
   | SimpleUnification -> SelectiveUnification.rank goal sigma env (SimpleAtomics.rank goal sigma env lemmas)
   | SimpleSplitUnification -> SelectiveSplitUnification.rank goal sigma env (SimpleAtomics.rank goal sigma env lemmas)
+  | SplitTypeUnification -> SelectiveUnification.rank goal sigma env (Split.rank goal sigma env lemmas)
+  | SplitTypeSplitUnification -> SelectiveSplitUnification.rank goal sigma env (Split.rank goal sigma env lemmas)
   | Shuffle -> shuffle lemmas
   | Basic -> lemmas
  
@@ -345,7 +347,6 @@ let get_completion_items ~id params st loc algorithm algorithm_factor =
     | _ , None -> Error ("Error in creating completion items because LEMMAS could not be found")
     | Some (goal, sigma, env), Some lemmas ->
       rank_choices algorithm algorithm_factor goal sigma env lemmas
-      |> take 500
       |> List.map (CompletionItems.pp_completion_item) 
       |> Result.ok
   with e -> 

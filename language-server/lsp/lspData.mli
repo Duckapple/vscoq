@@ -190,14 +190,16 @@ module Settings : sig
     module RankingAlgoritm : sig
       type t = 
       | Basic
+      | Shuffle
       | SimpleTypeIntersection
       | SplitTypeIntersection
       | StructuredTypeEvaluation
-      | SelectiveUnification
-      | SelectiveSplitUnification
+      | StructuredUnification
+      | StructuredSplitUnification
       | SimpleUnification
       | SimpleSplitUnification
-      | Shuffle
+      | SplitTypeUnification
+      | SplitTypeSplitUnification
       [@@deriving yojson]
     end
   
