@@ -315,6 +315,11 @@ module SelectiveSplitUnification = struct
   let rank = selectiveRank
 end
 
+let shuffle d =
+  let nd = List.map (fun c -> (Random.bits (), c)) d in
+  let sond = List.sort compare nd in
+  List.map snd sond
+
 let rank_choices algorithm algorithm_factor goal sigma env lemmas = 
   let open Lsp.LspData.Settings.RankingAlgoritm in
   match algorithm with
@@ -325,6 +330,7 @@ let rank_choices algorithm algorithm_factor goal sigma env lemmas =
   | SelectiveSplitUnification -> SelectiveSplitUnification.rank goal sigma env (Structured.rank true algorithm_factor goal sigma env lemmas)
   | SimpleUnification -> SelectiveUnification.rank goal sigma env (SimpleAtomics.rank goal sigma env lemmas)
   | SimpleSplitUnification -> SelectiveSplitUnification.rank goal sigma env (SimpleAtomics.rank goal sigma env lemmas)
+  | Shuffle -> shuffle lemmas
   | Basic -> lemmas
  
 

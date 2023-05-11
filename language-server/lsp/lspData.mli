@@ -197,6 +197,7 @@ module Settings : sig
       | SelectiveSplitUnification
       | SimpleUnification
       | SimpleSplitUnification
+      | Shuffle
       [@@deriving yojson]
     end
   

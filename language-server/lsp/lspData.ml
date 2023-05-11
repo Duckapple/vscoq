@@ -239,6 +239,7 @@ module Settings = struct
     | SelectiveSplitUnification
     | SimpleUnification
     | SimpleSplitUnification
+    | Shuffle
 
     let yojson_of_t = function
     | SimpleTypeIntersection -> `Int 0
@@ -249,6 +250,7 @@ module Settings = struct
     | Basic -> `Int 5
     | SimpleUnification -> `Int 6
     | SimpleSplitUnification -> `Int 7
+    | Shuffle -> `Int 8
 
     let t_of_yojson = function
     | `Int 0 -> SimpleTypeIntersection
@@ -259,6 +261,7 @@ module Settings = struct
     | `Int 5 -> Basic
     | `Int 6 -> SimpleUnification
     | `Int 7 -> SimpleSplitUnification
+    | `Int 8 -> Shuffle
     | _ -> Yojson.json_error @@ "invalid value "
 
   end
