@@ -47,6 +47,7 @@ module CompletionItem = struct
     detail : string option [@yojson.option];
     documentation : string option [@yojson.option];
     sortText : string option [@yojson.option];
+    filterText : string option [@yojson.option];
   } [@@deriving yojson]
 
 end

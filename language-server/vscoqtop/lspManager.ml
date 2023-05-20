@@ -305,6 +305,7 @@ let coqtopStepForward ~id params : (string * Dm.DocumentManager.events) =
       detail = Some typ;
       documentation = Some ("Path: " ^ path);
       sortText = Some (Printf.sprintf "%5d" i);
+      filterText = (if label == insertText then None else Some (insertText));
     } 
 
   let textDocumentCompletion ~id params =
