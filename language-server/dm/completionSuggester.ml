@@ -338,6 +338,10 @@ module Structured = struct
         else (1., if use_um then UM.add i u um else um)
       | AtomicUniType (t1, ua1), AtomicUniType (t2, ua2) -> 
         let c = EConstr.compare_constr evd (EConstr.eq_constr evd) t1 t2 |> Bool.to_float |> (Float.mul atomic_factor) in
+        let c = 
+          if isVar evd t1 && isVar evd t2 then
+            Float.mul c 2.0
+          else c in
         if Array.length ua1 <> Array.length ua2 then (c, um)
         else 
           let (score, um) = Array.fold_left (fun (acc, um) (u1, u2) -> 
@@ -371,18 +375,17 @@ module Structured = struct
   let rank use_um (size_impact, atomic_factor) (goal, goal_evar) sigma env lemmas : CompletionItems.completion_item list =
     let finalScore score size = Float.sub size (Float.mul score size_impact) in
     let hyps = get_hyps sigma goal_evar in
-    match unifier_kind sigma hyps goal with
-    | None -> lemmas
-    | Some goalUnf -> 
-      (*
+    match (unifier_kind sigma hyps goal, unifier_kind sigma HypothesisMap.empty goal) with
+    | None, _ | _, None -> lemmas
+    | Some goalUnf, Some goalUnfNoHypothesisSub -> 
       print_unifier env sigma goalUnf;
       debug_print env sigma goal;
-      *)
       let lemmaUnfs = List.map (fun (l : CompletionItems.completion_item) -> 
         match (unifier_kind sigma HypothesisMap.empty (of_constr l.typ)) with
         | None -> ((Float.min_float), l)
         | Some unf -> 
           let scores = List.map (score_unifier use_um atomic_factor sigma goalUnf) (unpack_unifier unf) in
+          let scores = scores @ (List.map (score_unifier use_um atomic_factor sigma goalUnfNoHypothesisSub) (unpack_unifier unf)) in
           let size = size_unifier unf |> Int32.to_float in
           let maxScore = List.fold_left Float.max 0. scores in
           let final = finalScore maxScore size in
@@ -390,6 +393,9 @@ module Structured = struct
           (final, l)
       ) lemmas in
       let sorted = List.stable_sort (fun (x, _) (y, _) -> Float.compare x y) lemmaUnfs in
+      let hd = List.hd sorted |> snd in
+      print_unifier env sigma ((unifier_kind sigma HypothesisMap.empty (of_constr hd.typ)) |> Option.get);
+      debug_print env sigma (of_constr hd.typ);
       List.map snd sorted
 end
 
