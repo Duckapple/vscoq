@@ -378,8 +378,10 @@ module Structured = struct
     match (unifier_kind sigma hyps goal, unifier_kind sigma HypothesisMap.empty goal) with
     | None, _ | _, None -> lemmas
     | Some goalUnf, Some goalUnfNoHypothesisSub -> 
+      (*         
       print_unifier env sigma goalUnf;
       debug_print env sigma goal;
+      *)
       let lemmaUnfs = List.map (fun (l : CompletionItems.completion_item) -> 
         match (unifier_kind sigma HypothesisMap.empty (of_constr l.typ)) with
         | None -> ((Float.min_float), l)
@@ -393,9 +395,11 @@ module Structured = struct
           (final, l)
       ) lemmas in
       let sorted = List.stable_sort (fun (x, _) (y, _) -> Float.compare x y) lemmaUnfs in
+      (*
       let hd = List.hd sorted |> snd in
       print_unifier env sigma ((unifier_kind sigma HypothesisMap.empty (of_constr hd.typ)) |> Option.get);
       debug_print env sigma (of_constr hd.typ);
+      *)
       List.map snd sorted
 end
 
