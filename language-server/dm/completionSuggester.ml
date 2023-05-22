@@ -33,6 +33,28 @@ let takeSkip n l =
 
 module Atomics = Set.Make(TypeCompare)
 
+module HypothesisMap = Map.Make (struct type t = Id.t let compare = compare end)
+
+let mk_hyp sigma d (env,l) =
+  let d' = CompactedDecl.to_named_context d in
+  let env' = List.fold_right Environ.push_named d' env in
+  let ids, typ = match d with
+  | CompactedDecl.LocalAssum (ids, typ) -> ids, typ
+  | CompactedDecl.LocalDef (ids,c,typ) -> ids, typ
+  in
+  let ids' = List.map (fun id -> id.Context.binder_name) ids in
+  let m = List.fold_right (fun id acc -> HypothesisMap.add id (of_constr typ) acc) ids' l in
+  (env', m)
+
+let get_hyps sigma goal =
+    let EvarInfo evi = Evd.find sigma goal in
+    let env = Evd.evar_filtered_env (Global.env ()) evi in
+    let min_env = Environ.reset_context env in
+    let (_env, hyps) =
+      Context.Compacted.fold (mk_hyp sigma)
+        (Termops.compact_named_context (Environ.named_context env)) ~init:(min_env, HypothesisMap.empty) in
+    hyps
+
 let get_goal_type st loc =
   let goal, sigma = 
     match DocumentManager.get_proof st loc with
@@ -50,7 +72,7 @@ let get_goal_type_option st loc =
     |> Option.map (fun goal ->
       let evi = Evd.find_undefined sigma goal in
       let env = Evd.evar_filtered_env (Global.env ()) evi in
-      Evd.evar_concl evi, sigma, env
+      Evd.evar_concl evi, sigma, env, goal
       )
     )
 
@@ -130,12 +152,68 @@ end
 
 type rev_bruijn_index = int
 
-
-
 module Structured = struct
   type unifier = 
     | SortUniType of ESorts.t * rev_bruijn_index
     | AtomicUniType of types * unifier array
+
+  let print_unifier env sigma u =
+    let po u = match kind sigma u with
+    | Sort s -> Printf.eprintf "Sort: ";
+      (match ESorts.kind sigma s with 
+      | SProp -> Printf.eprintf "SProp\n";
+      | Prop -> Printf.eprintf "Prop\n";
+      | Set  -> Printf.eprintf "Set\n";
+      | Type u -> Printf.eprintf "Type\n";
+      | QSort (u, l) -> Printf.eprintf "QSort\n";
+      )
+    | Cast (c,_,t) -> Printf.eprintf "cast: %s, %s\n" 
+      (Pp.string_of_ppcmds (pr_econstr_env env sigma c))
+      (Pp.string_of_ppcmds (pr_econstr_env env sigma t))
+    | Prod (na,t,c) -> Printf.eprintf "Prod: %s\n"
+      (Name.print na.binder_name |> Pp.string_of_ppcmds)
+    | LetIn (name,b,t,c) -> 
+      Printf.eprintf "LetIn: %s, %s, %s\n" 
+        (Pp.string_of_ppcmds (pr_econstr_env env sigma b))
+        (Pp.string_of_ppcmds (pr_econstr_env env sigma t))
+        (Pp.string_of_ppcmds (pr_econstr_env env sigma c))
+    | App (c,l) -> 
+      Printf.eprintf "App: %s\n" 
+        (Pp.string_of_ppcmds (pr_econstr_env env sigma c))
+    | Rel i -> Printf.eprintf "Rel: %d\n" i
+    | Meta _ -> Printf.eprintf "Meta: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Var v -> Printf.eprintf "Var: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Evar _ -> Printf.eprintf "Evar: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Const _ -> Printf.eprintf "Const: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Proj _ -> Printf.eprintf "Proj: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Case _ -> Printf.eprintf "Case: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Fix _ -> Printf.eprintf "Fix: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | CoFix _ -> Printf.eprintf "CoFix: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Ind _ -> Printf.eprintf "Ind: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Lambda _ -> Printf.eprintf "Lambda: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Construct _ -> Printf.eprintf "Construct: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Int _ -> Printf.eprintf "Int: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Float _ -> Printf.eprintf "Float: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    | Array _ -> Printf.eprintf "Array: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    in
+    let rec aux i u = 
+      Printf.eprintf "%s" (String.init i (fun _ -> ' '));
+      match u with
+      | SortUniType (s, i) -> Printf.eprintf "Sort %d: %s\n" i
+        (match ESorts.kind sigma s with 
+        | SProp -> "SProp"
+        | Prop -> "Prop"
+        | Set  -> "Set"
+        | Type u -> "Type"
+        | QSort _ -> "QSort"
+        )
+      | AtomicUniType (t, ta) -> Printf.eprintf "Atomic: ";
+        po t;
+      Array.iter (aux (i+1)) ta
+    in
+    aux 0 u
+
+
 
   (* map from rev_bruijn_index to unifier *)
   module UM = Map.Make(struct type t = rev_bruijn_index let compare = compare end)
@@ -144,7 +222,56 @@ module Structured = struct
   let filter_options a = 
     a |> Array.to_list |> Option.List.flatten |> Array.of_list
 
-  let unifier_kind sigma (t : types) : unifier option =
+  let debug_print env sigma t : unit = 
+    let rec aux i u = 
+      Printf.eprintf "%s" (String.init i (fun _ -> ' '));
+      match kind sigma u with
+      | Sort s -> Printf.eprintf "Sort: ";
+        (match ESorts.kind sigma s with 
+        | SProp -> Printf.eprintf "SProp\n";
+        | Prop -> Printf.eprintf "Prop\n";
+        | Set  -> Printf.eprintf "Set\n";
+        | Type u -> Printf.eprintf "Type\n";
+        | QSort (u, l) -> Printf.eprintf "QSort\n";
+        )
+      | Cast (c,_,t) -> Printf.eprintf "cast: %s, %s\n" 
+        (Pp.string_of_ppcmds (pr_econstr_env env sigma c))
+        (Pp.string_of_ppcmds (pr_econstr_env env sigma t))
+      | Prod (na,t,c) -> Printf.eprintf "Prod: %s\n"
+        (Name.print na.binder_name |> Pp.string_of_ppcmds);
+        aux (i+1) t;
+        aux (i+1) c
+      | LetIn (name,b,t,c) -> 
+        Printf.eprintf "LetIn: %s, %s, %s\n" 
+          (Pp.string_of_ppcmds (pr_econstr_env env sigma b))
+          (Pp.string_of_ppcmds (pr_econstr_env env sigma t))
+          (Pp.string_of_ppcmds (pr_econstr_env env sigma c));
+        aux (i+1) t;
+        aux (i+1) c;
+        aux (i+1) b
+      | App (c,l) -> 
+        Printf.eprintf "App: %s\n" 
+          (Pp.string_of_ppcmds (pr_econstr_env env sigma c));
+        Array.iter (aux (i+1)) l
+      | Rel i -> Printf.eprintf "Rel: %d\n" i
+      | Meta _ -> Printf.eprintf "Meta: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Var v -> Printf.eprintf "Var: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Evar _ -> Printf.eprintf "Evar: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Const _ -> Printf.eprintf "Const: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Proj _ -> Printf.eprintf "Proj: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Case _ -> Printf.eprintf "Case: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Fix _ -> Printf.eprintf "Fix: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | CoFix _ -> Printf.eprintf "CoFix: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Ind _ -> Printf.eprintf "Ind: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Lambda _ -> Printf.eprintf "Lambda: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Construct _ -> Printf.eprintf "Construct: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Int _ -> Printf.eprintf "Int: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Float _ -> Printf.eprintf "Float: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+      | Array _ -> Printf.eprintf "Array: %s\n" (Pp.string_of_ppcmds (pr_econstr_env env sigma u))
+    in
+    aux 0 t
+
+  let unifier_kind sigma (hyps : types HypothesisMap.t) (t : types) : unifier option =
     let rec aux bruijn t = match kind sigma t with
       | Sort s -> SortUniType (s, List.length bruijn) |> Option.make
       | Cast (c,_,t) -> aux bruijn c
@@ -154,6 +281,7 @@ module Structured = struct
         let l' = Array.map (aux bruijn) l in
         AtomicUniType (c, filter_options l') |> Option.make
       | Rel i -> List.nth bruijn (i-1)
+      | Var v when HypothesisMap.mem v hyps -> aux bruijn (HypothesisMap.find v hyps)
       | (Meta _ | Var _ | Evar _ | Const _
       | Proj _ | Case _ | Fix _ | CoFix _ | Ind _)
         -> AtomicUniType (t,[||]) |> Option.make
@@ -240,13 +368,18 @@ module Structured = struct
 
   (* A Lower score is better as we are sorting in ascending order *)
 
-  let rank use_um (size_impact, atomic_factor) (goal : Evd.econstr) sigma env lemmas : CompletionItems.completion_item list =
+  let rank use_um (size_impact, atomic_factor) (goal, goal_evar) sigma env lemmas : CompletionItems.completion_item list =
     let finalScore score size = Float.sub size (Float.mul score size_impact) in
-    match unifier_kind sigma goal with
+    let hyps = get_hyps sigma goal_evar in
+    match unifier_kind sigma hyps goal with
     | None -> lemmas
     | Some goalUnf -> 
+      (*
+      print_unifier env sigma goalUnf;
+      debug_print env sigma goal;
+      *)
       let lemmaUnfs = List.map (fun (l : CompletionItems.completion_item) -> 
-        match (unifier_kind sigma (of_constr l.typ)) with
+        match (unifier_kind sigma HypothesisMap.empty (of_constr l.typ)) with
         | None -> ((Float.min_float), l)
         | Some unf -> 
           let scores = List.map (score_unifier use_um atomic_factor sigma goalUnf) (unpack_unifier unf) in
@@ -280,8 +413,12 @@ module SelectiveUnification = struct
     |> List.map fst
   
   let selectiveRank (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
-    let take, skip = takeSkip 100 lemmas in
-    List.append (realRank goal sigma env take) skip
+    try 
+      let take, skip = takeSkip 100 lemmas in
+      List.append (realRank goal sigma env take) skip
+    with e ->
+      Printf.eprintf "Error in Unification: %s\n%!" (Printexc.to_string e);
+      lemmas
 
   let rank = selectiveRank
 end
@@ -312,8 +449,12 @@ module SelectiveSplitUnification = struct
     |> List.map fst
 
   let selectiveRank (goal : Evd.econstr) sigma env (lemmas : CompletionItems.completion_item list) : CompletionItems.completion_item list =
-    let take, skip = takeSkip 100 lemmas in
-    List.append (realRank goal sigma env take) skip
+    try 
+      let take, skip = takeSkip 100 lemmas in
+      List.append (realRank goal sigma env take) skip
+    with e ->
+      Printf.eprintf "Error in Split Unification: %s\n%!" (Printexc.to_string e);
+      lemmas
 
   let rank = selectiveRank
 end
@@ -323,21 +464,21 @@ let shuffle d =
   let sond = List.sort compare nd in
   List.map snd sond
 
-let rank_choices algorithm algorithm_factor goal sigma env lemmas = 
+let rank_choices algorithm algorithm_factor (goal, goal_evar) sigma env lemmas = 
   let open Lsp.LspData.Settings.RankingAlgoritm in
   match algorithm with
   | SimpleTypeIntersection -> SimpleAtomics.rank goal sigma env lemmas
   | SplitTypeIntersection -> Split.rank goal sigma env lemmas
-  | StructuredTypeEvaluation -> Structured.rank true algorithm_factor goal sigma env lemmas
-  | StructuredUnification -> SelectiveUnification.rank goal sigma env (Structured.rank true algorithm_factor goal sigma env lemmas)
-  | StructuredSplitUnification -> SelectiveSplitUnification.rank goal sigma env (Structured.rank true algorithm_factor goal sigma env lemmas)
+  | StructuredTypeEvaluation -> Structured.rank true algorithm_factor (goal, goal_evar) sigma env lemmas
+  | StructuredUnification -> SelectiveUnification.rank goal sigma env (Structured.rank true algorithm_factor (goal, goal_evar) sigma env lemmas)
+  | StructuredSplitUnification -> SelectiveSplitUnification.rank goal sigma env (Structured.rank true algorithm_factor (goal, goal_evar) sigma env lemmas)
   | SimpleUnification -> SelectiveUnification.rank goal sigma env (SimpleAtomics.rank goal sigma env lemmas)
   | SimpleSplitUnification -> SelectiveSplitUnification.rank goal sigma env (SimpleAtomics.rank goal sigma env lemmas)
   | SplitTypeUnification -> SelectiveUnification.rank goal sigma env (Split.rank goal sigma env lemmas)
   | SplitTypeSplitUnification -> SelectiveSplitUnification.rank goal sigma env (Split.rank goal sigma env lemmas)
   | Shuffle -> shuffle lemmas
   | Basic -> lemmas
- 
+
 
 let get_completion_items ~id params st loc algorithm algorithm_factor =
   try 
@@ -345,10 +486,14 @@ let get_completion_items ~id params st loc algorithm algorithm_factor =
     match get_goal_type_option st (Some loc), DocumentManager.get_lemmas st loc with
     | None, _ -> Error ("Error in creating completion items because GOAL could not be found")
     | _ , None -> Error ("Error in creating completion items because LEMMAS could not be found")
-    | Some (goal, sigma, env), Some lemmas ->
-      rank_choices algorithm algorithm_factor goal sigma env lemmas
-      |> List.map (CompletionItems.pp_completion_item) 
-      |> Result.ok
+    | Some (goal, sigma, env, goal_evar), Some lemmas ->
+      let lemmas = try
+        rank_choices algorithm algorithm_factor (goal, goal_evar) sigma env lemmas
+      with e ->
+        Printf.eprintf "Ranking of lemmas failed: %s" (Printexc.to_string e);
+        lemmas
+      in
+      List.map (CompletionItems.pp_completion_item) lemmas |> Result.ok
   with e -> 
     Printf.eprintf "Error in creating completion items: %s" (Printexc.to_string e);
     Error ("Error in creating completion items: " ^ (Printexc.to_string e))
