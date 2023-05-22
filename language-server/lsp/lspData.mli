@@ -32,6 +32,7 @@ module CompletionItem : sig
     detail : string option;
     documentation : string option;
     sortText : string option;
+    filterText : string option;
   } [@@deriving yojson]
 end
 

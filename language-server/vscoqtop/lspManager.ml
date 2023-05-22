@@ -40,7 +40,7 @@ let algoritm_factor = ref 5.0
 
 let size_factor = ref 2.0
 
-let enable_diag = ref false
+let enable_diag = ref true
 
 let lsp_debug = CDebug.create ~name:"vscoq.lspManager" ()
 
