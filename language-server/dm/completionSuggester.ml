@@ -399,15 +399,19 @@ module SelectiveUnification = struct
     let aux (lemma : CompletionItems.completion_item) =
       if type_size sigma (of_constr lemma.typ) + goal_size > 500 then (lemma, 1)
       else
-      let flags = Evarconv.default_flags_of TransparentState.full in
-      let res = Evarconv.evar_conv_x flags env sigma Reduction.CONV goal (of_constr lemma.typ) in
-      match res with 
-      | Success evd ->
-        ({lemma with completes = Some Fully}, 0)
-      | UnifFailure (evd, reason) ->
-        (lemma, 1)
+        try
+          let flags = Evarconv.default_flags_of TransparentState.full in
+          let res = Evarconv.evar_conv_x flags env sigma Reduction.CONV goal (of_constr lemma.typ) in
+          match res with 
+          | Success evd ->
+            ({lemma with completes = Some Fully}, 0)
+          | UnifFailure (evd, reason) ->
+            (lemma, 1)
+        with e ->
+          Printf.eprintf "Error in Unification: %s for %s\n%!" (Printexc.to_string e) (Pp.string_of_ppcmds (pr_global lemma.ref));
+          (lemma, 1)
      in
-    lemmas 
+      lemmas
     |> List.map aux
     |> List.stable_sort (fun a b -> compare (snd a) (snd b))
     |> List.map fst
@@ -441,7 +445,11 @@ module SelectiveSplitUnification = struct
           | Cast (c,_,_) -> aux iterations c
           | _            -> (lemma, 1000) (* This just needs to be an arbitrarily high number*)
         in
-      aux 0 (of_constr lemma.typ)
+      try 
+        aux 0 (of_constr lemma.typ)
+      with e ->
+        Printf.eprintf "Error in Split Unification: %s for %s\n%!" (Printexc.to_string e) (Pp.string_of_ppcmds (pr_global lemma.ref));
+        (lemma, 1000)
      in
     lemmas
     |> List.map make_sortable
