@@ -201,6 +201,8 @@ module Settings : sig
       | SimpleSplitUnification
       | SplitTypeUnification
       | SplitTypeSplitUnification
+      | ShuffleUnification
+      | ShuffleSplitUnification
       [@@deriving yojson]
     end
   

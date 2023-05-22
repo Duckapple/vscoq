@@ -485,6 +485,8 @@ let rank_choices algorithm algorithm_factor (goal, goal_evar) sigma env lemmas =
   | SplitTypeUnification -> SelectiveUnification.rank goal sigma env (Split.rank goal sigma env lemmas)
   | SplitTypeSplitUnification -> SelectiveSplitUnification.rank goal sigma env (Split.rank goal sigma env lemmas)
   | Shuffle -> shuffle lemmas
+  | ShuffleUnification -> SelectiveUnification.rank goal sigma env (shuffle lemmas)
+  | ShuffleSplitUnification -> SelectiveSplitUnification.rank goal sigma env (shuffle lemmas)
   | Basic -> lemmas
 
 

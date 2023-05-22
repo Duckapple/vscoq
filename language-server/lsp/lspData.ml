@@ -243,6 +243,9 @@ module Settings = struct
     | SimpleSplitUnification
     | SplitTypeUnification
     | SplitTypeSplitUnification
+    | ShuffleUnification
+    | ShuffleSplitUnification
+    
 
     let yojson_of_t = function
     | Basic -> `Int 0
@@ -256,6 +259,8 @@ module Settings = struct
     | SimpleSplitUnification -> `Int 8
     | SplitTypeUnification -> `Int 9
     | SplitTypeSplitUnification -> `Int 10
+    | ShuffleUnification -> `Int 11
+    | ShuffleSplitUnification -> `Int 12
 
     let t_of_yojson = function
     | `Int 0 -> Basic
@@ -269,6 +274,8 @@ module Settings = struct
     | `Int 8 -> SimpleSplitUnification
     | `Int 9 -> SplitTypeUnification
     | `Int 10 -> SplitTypeSplitUnification
+    | `Int 11 -> ShuffleUnification
+    | `Int 12 -> ShuffleSplitUnification
     | _ -> Yojson.json_error @@ "invalid value "
 
   end
